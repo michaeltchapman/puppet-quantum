@@ -21,6 +21,10 @@ describe provider_class do
     }
   end
 
+  let :instance_hash do
+    { net_name => net_attrs }
+  end
+
   describe 'when updating a network' do
     let :resource do
       Puppet::Type::Quantum_network.new(net_attrs)
@@ -31,6 +35,7 @@ describe provider_class do
     end
 
     it 'should call net-update to change admin_state_up' do
+      provider.expects(:instance_hash).returns(instance_hash)
       provider.expects(:auth_quantum).with('net-update',
                                            '--admin_state_up=False',
                                            net_name)
@@ -38,6 +43,7 @@ describe provider_class do
     end
 
     it 'should call net-update to change shared' do
+      provider.expects(:instance_hash).returns(instance_hash)
       provider.expects(:auth_quantum).with('net-update',
                                            '--shared=True',
                                            net_name)
@@ -45,6 +51,7 @@ describe provider_class do
     end
 
     it 'should call net-update to change router_external' do
+      provider.expects(:instance_hash).returns(instance_hash)
       provider.expects(:auth_quantum).with('net-update',
                                            '--router:external=True',
                                            net_name)

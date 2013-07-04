@@ -19,6 +19,10 @@ describe provider_class do
     }
   end
 
+  let :instance_hash do
+    { router_name => router_attrs }
+  end
+
   describe 'when updating a router' do
     let :resource do
       Puppet::Type::Quantum_router.new(router_attrs)
@@ -29,6 +33,7 @@ describe provider_class do
     end
 
     it 'should call router-update to change admin_state_up' do
+      provider.expects(:instance_hash).returns(instance_hash)
       provider.expects(:auth_quantum).with('router-update',
                                            '--admin-state-up=False',
                                            router_name)

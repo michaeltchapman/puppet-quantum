@@ -23,6 +23,10 @@ describe provider_class do
     }
   end
 
+  let :instance_hash do
+    { subnet_name => subnet_attrs }
+  end
+
   describe 'when updating a subnet' do
     let :resource do
       Puppet::Type::Quantum_subnet.new(subnet_attrs)
@@ -30,6 +34,15 @@ describe provider_class do
 
     let :provider do
       provider_class.new(resource)
+    end
+
+    before :each do
+      provider.expects(:instance_hash).returns(instance_hash)
+    end
+
+    after :each do
+      # reset global state
+      provider_class.prefetch(nil)
     end
 
     it 'should call subnet-update to change gateway_ip' do

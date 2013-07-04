@@ -13,12 +13,38 @@ Puppet::Type.type(:quantum_router).provide(
 
   commands :quantum => 'quantum'
 
-  mk_resource_methods
+  def self.prefetch(resources)
+    # rebuild the cache for every puppet run
+    @instance_hash = nil
+  end
+
+  def self.instance_hash
+    @instance_hash ||= build_instance_hash
+  end
+
+  def instance_hash
+    self.class.instance_hash
+  end
+
+  def instance
+    instance_hash[resource[:name]]
+  end
 
   def self.instances
-    list_quantum_resources('router').collect do |id|
-      attrs = get_quantum_resource_attrs('router', id)
+    instance_hash.collect do |k, v|
       new(
+          :name => k,
+          :id   => v[:id]
+          )
+    end
+  end
+
+  def self.build_instance_hash
+    hash = {}
+    quantum_type = 'router'
+    list_quantum_resources(quantum_type).collect do |id|
+      attrs = get_quantum_resource_attrs(quantum_type, id)
+      hash[attrs['name']] = {
         :ensure                    => :present,
         :name                      => attrs['name'],
         :id                        => attrs['id'],
@@ -26,21 +52,13 @@ Puppet::Type.type(:quantum_router).provide(
         :external_gateway_info     => attrs['external_gateway_info'],
         :status                    => attrs['status'],
         :tenant_id                 => attrs['tenant_id']
-      )
+      }
     end
-  end
-
-  def self.prefetch(resources)
-    instances_ = instances
-    resources.keys.each do |name|
-      if provider = instances_.find{ |instance| instance.name == name }
-        resources[name].provider = provider
-      end
-    end
+    hash
   end
 
   def exists?
-    @property_hash[:ensure] == :present
+    instance
   end
 
   def create
@@ -63,7 +81,7 @@ Puppet::Type.type(:quantum_router).provide(
 
     if results =~ /Created a new router:/
       attrs = self.class.parse_creation_output(results)
-      @property_hash = {
+      instance_hash[resource[:name]] = {
         :ensure                    => :present,
         :name                      => resource[:name],
         :id                        => attrs['id'],
@@ -80,8 +98,7 @@ Puppet::Type.type(:quantum_router).provide(
         if results =~ /Set gateway for router/
           attrs = self.class.get_quantum_resource_attrs('router',
                                                         @resource[:name])
-          @property_hash[:external_gateway_info] = \
-            attrs['external_gateway_info']
+          instance[:external_gateway_info] = attrs['external_gateway_info']
         else
           fail(<<-EOT
 did not get expected message on setting router gateway, got #{results}
@@ -96,7 +113,7 @@ EOT
 
   def destroy
     auth_quantum('router-delete', name)
-    @property_hash[:ensure] = :absent
+    instance[:ensure] = :absent
   end
 
   def gateway_network_name
@@ -133,6 +150,27 @@ EOT
 
   def admin_state_up=(value)
     auth_quantum('router-update', "--admin-state-up=#{value}", name)
+    instance[:admin_state_up] = value
+  end
+
+  [
+   :id,
+   :admin_state_up,
+   :external_gateway_info,
+   :status,
+   :tenant_id,
+  ].each do |attr|
+    define_method(attr.to_s) do
+      instance[attr] || :absent
+    end
+  end
+
+  [
+   :tenant_id,
+  ].each do |attr|
+    define_method(attr.to_s + "=") do |value|
+      fail("Property #{attr.to_s} does not support being updated")
+    end
   end
 
 end

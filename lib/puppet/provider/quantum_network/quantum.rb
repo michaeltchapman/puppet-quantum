@@ -13,8 +13,6 @@ Puppet::Type.type(:quantum_network).provide(
 
   commands :quantum => 'quantum'
 
-  mk_resource_methods
-
   def self.has_provider_extension?
     list_quantum_extensions.include?('provider')
   end
@@ -35,14 +33,38 @@ Puppet::Type.type(:quantum_network).provide(
 
   has_feature :router_extension if has_router_extension?
 
-  def self.quantum_type
-    'net'
+  def self.prefetch(resources)
+    # rebuild the cache for every puppet run
+    @instance_hash = nil
+  end
+
+  def self.instance_hash
+    @instance_hash ||= build_instance_hash
+  end
+
+  def instance_hash
+    self.class.instance_hash
+  end
+
+  def instance
+    instance_hash[resource[:name]]
   end
 
   def self.instances
+    instance_hash.collect do |k, v|
+      new(
+          :name => k,
+          :id   => v[:id]
+          )
+    end
+  end
+
+  def self.build_instance_hash
+    hash = {}
+    quantum_type = 'net'
     list_quantum_resources(quantum_type).collect do |id|
       attrs = get_quantum_resource_attrs(quantum_type, id)
-      new(
+      hash[attrs['name']] = {
         :ensure                    => :present,
         :name                      => attrs['name'],
         :id                        => attrs['id'],
@@ -53,21 +75,13 @@ Puppet::Type.type(:quantum_network).provide(
         :router_external           => attrs['router:external'],
         :shared                    => attrs['shared'],
         :tenant_id                 => attrs['tenant_id']
-      )
+      }
     end
-  end
-
-  def self.prefetch(resources)
-    networks = instances
-    resources.keys.each do |name|
-      if provider = networks.find{ |net| net.name == name }
-        resources[name].provider = provider
-      end
-    end
+    hash
   end
 
   def exists?
-    @property_hash[:ensure] == :present
+    instance
   end
 
   def create
@@ -109,7 +123,7 @@ Puppet::Type.type(:quantum_network).provide(
 
     if results =~ /Created a new network:/
       attrs = self.class.parse_creation_output(results)
-      @property_hash = {
+      instance_hash[resource[:name]] = {
         :ensure                    => :present,
         :name                      => resource[:name],
         :id                        => attrs['id'],
@@ -128,19 +142,34 @@ Puppet::Type.type(:quantum_network).provide(
 
   def destroy
     auth_quantum('net-delete', name)
-    @property_hash[:ensure] = :absent
+    instance[:ensure] = :absent
   end
 
   def admin_state_up=(value)
     auth_quantum('net-update', "--admin_state_up=#{value}", name)
+    instance[:admin_state_up] = value
   end
 
   def shared=(value)
     auth_quantum('net-update', "--shared=#{value}", name)
+    instance[:shared] = value
   end
 
   def router_external=(value)
     auth_quantum('net-update', "--router:external=#{value}", name)
+    instance[:router_external] = value
+  end
+
+  [
+   :id,
+   :admin_state_up,
+   :shared,
+   :router_external,
+   :tenant_id,
+  ].each do |attr|
+    define_method(attr.to_s) do
+      instance[attr] || :absent
+    end
   end
 
   [
@@ -149,9 +178,9 @@ Puppet::Type.type(:quantum_network).provide(
    :provider_segmentation_id,
    :tenant_id,
   ].each do |attr|
-     define_method(attr.to_s + "=") do |value|
-       fail("Property #{attr.to_s} does not support being updated")
-     end
+    define_method(attr.to_s + "=") do |value|
+      fail("Property #{attr.to_s} does not support being updated")
+    end
   end
 
 end

@@ -13,16 +13,40 @@ Puppet::Type.type(:quantum_subnet).provide(
 
   commands :quantum => 'quantum'
 
-  mk_resource_methods
+  def self.prefetch(resources)
+    # rebuild the cache for every puppet run
+    @instance_hash = nil
+  end
 
-  def self.quantum_type
-    'subnet'
+  def self.instance_hash
+    @instance_hash ||= build_instance_hash
+  end
+
+  def instance_hash
+    self.class.instance_hash
+  end
+
+  def instance
+    instance_hash[resource[:name]]
   end
 
   def self.instances
+    instance_hash.collect do |k, v|
+      new(
+          :name       => k,
+          :id         => v[:id],
+          :gateway_ip => v[:gateway_ip],
+          :cidr       => v[:cidr]
+          )
+    end
+  end
+
+  def self.build_instance_hash
+    hash = {}
+    quantum_type = 'subnet'
     list_quantum_resources(quantum_type).collect do |id|
       attrs = get_quantum_resource_attrs(quantum_type, id)
-      new(
+      hash[attrs['name']] = {
         :ensure                    => :present,
         :name                      => attrs['name'],
         :id                        => attrs['id'],
@@ -35,21 +59,13 @@ Puppet::Type.type(:quantum_subnet).provide(
         :enable_dhcp               => attrs['enable_dhcp'],
         :network_id                => attrs['network_id'],
         :tenant_id                 => attrs['tenant_id']
-      )
+      }
     end
-  end
-
-  def self.prefetch(resources)
-    subnets = instances
-    resources.keys.each do |name|
-      if provider = subnets.find{ |subnet| subnet.name == name }
-        resources[name].provider = provider
-      end
-    end
+    hash
   end
 
   def exists?
-    @property_hash[:ensure] == :present
+    instance
   end
 
   def create
@@ -86,7 +102,7 @@ Puppet::Type.type(:quantum_subnet).provide(
 
     if results =~ /Created a new subnet:/
       attrs = self.class.parse_creation_output(results)
-      @property_hash = {
+      instance_hash[resource[:name]] = {
         :ensure                    => :present,
         :name                      => resource[:name],
         :id                        => attrs['id'],
@@ -107,15 +123,34 @@ Puppet::Type.type(:quantum_subnet).provide(
 
   def destroy
     auth_quantum('subnet-delete', name)
-    @property_hash[:ensure] = :absent
+    instance[:ensure] = :absent
   end
 
   def gateway_ip=(value)
     auth_quantum('subnet-update', "--gateway-ip=#{value}", name)
+    instance[:gateway_ip] = value
   end
 
   def enable_dhcp=(value)
     auth_quantum('subnet-update', "--enable-dhcp=#{value}", name)
+    instance[:enable_dhcp] = value
+  end
+
+  [
+   :id,
+   :cidr,
+   :ip_version,
+   :allocation_pools,
+   :gateway_ip,
+   :enable_dhcp,
+   :host_routes,
+   :dns_nameservers,
+   :network_id,
+   :tenant_id,
+  ].each do |attr|
+    define_method(attr.to_s) do
+      instance[attr] || :absent
+    end
   end
 
   [
@@ -124,9 +159,9 @@ Puppet::Type.type(:quantum_subnet).provide(
    :network_id,
    :tenant_id,
   ].each do |attr|
-     define_method(attr.to_s + "=") do |value|
-       fail("Property #{attr.to_s} does not support being updated")
-     end
+    define_method(attr.to_s + "=") do |value|
+      fail("Property #{attr.to_s} does not support being updated")
+    end
   end
 
 end

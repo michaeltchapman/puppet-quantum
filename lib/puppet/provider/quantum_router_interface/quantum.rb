@@ -19,40 +19,56 @@ Puppet::Type.type(:quantum_router_interface).provide(
 
   commands :quantum => 'quantum'
 
-  mk_resource_methods
+
+  def self.prefetch(resources)
+    # rebuild the cache for every puppet run
+    @instance_cache = nil
+  end
+
+  def self.instance_hash
+    @instance_hash ||= build_instance_hash
+  end
+
+  def instance_hash
+    self.class.instance_hash
+  end
+
+  def instance
+    instance_hash[resource[:name]]
+  end
 
   def self.instances
+    instance_hash.collect do |k, v|
+      new(
+          :name => k,
+          :id   => v[:id]
+          )
+    end
+  end
+
+  def self.build_instance_hash
+    hash = {}
     subnet_name_hash = {}
     Puppet::Type.type('quantum_subnet').instances.each do |instance|
       subnet_name_hash[instance.provider.id] = instance.provider.name
     end
-    instances_ = []
     Puppet::Type.type('quantum_router').instances.each do |instance|
       list_router_ports(instance.provider.id).each do |port_hash|
         router_name = instance.provider.name
         subnet_name = subnet_name_hash[port_hash['subnet_id']]
         name = "#{router_name}:#{subnet_name}"
-        instances_ << new(
-            :ensure                    => :present,
-            :name                      => name,
-            :id                        => port_hash['id']
-            )
+        hash[name] = {
+          :ensure => :present,
+          :name   => name,
+          :id     => port_hash['id']
+        }
       end
     end
-    return instances_
-  end
-
-  def self.prefetch(resources)
-    instances_ = instances
-    resources.keys.each do |name|
-      if provider = instances_.find{ |instance| instance.name == name }
-        resources[name].provider = provider
-      end
-    end
+    hash
   end
 
   def exists?
-    @property_hash[:ensure] == :present
+    instance
   end
 
   def create
@@ -60,7 +76,7 @@ Puppet::Type.type(:quantum_router_interface).provide(
                            resource[:name].split(':', 2))
 
     if results =~ /Added interface to router/
-      @property_hash = {
+      instance_hash[resource[:name]] = {
         :ensure => :present,
         :name   => resource[:name],
       }
@@ -80,11 +96,12 @@ Puppet::Type.type(:quantum_router_interface).provide(
   def id
     # TODO: Need to look this up for newly-added resources since it is
     # not returned on creation
+    :absent
   end
 
   def destroy
     auth_quantum('router-interface-delete', router_name, subnet_name)
-    @property_hash[:ensure] = :absent
+    instance[:ensure] = :absent
   end
 
 end
