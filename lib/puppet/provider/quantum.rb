@@ -54,7 +54,10 @@ correctly configured.")
   end
 
   def self.quantum_conf
-    return @quantum_conf if @quantum_conf
+    if @quantum_conf
+      @quantum_conf.read(conf_filename)
+      return @quantum_conf
+    end
     @quantum_conf = Puppet::Util::IniConfig::File.new
     @quantum_conf.read(conf_filename)
     @quantum_conf
