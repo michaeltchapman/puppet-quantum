@@ -48,6 +48,9 @@ class openstack::compute (
   $keystone_host                 = '127.0.0.1',
   $quantum_host                  = '127.0.0.1',
   $ovs_local_ip                  = false,
+  $ovs_network_vlan_ranges       = undef,
+  $ovs_bridge_mappings           = undef,
+  $ovs_bridge_uplinks            = undef,
   # Nova
   $nova_admin_tenant_name        = 'services',
   $nova_admin_user               = 'nova',
@@ -187,27 +190,31 @@ class openstack::compute (
 
     class { 'openstack::quantum':
       # Database
-      db_host           => $db_host,
+      db_host                 => $db_host,
       # Networking
-      ovs_local_ip      => $ovs_local_ip_real,
+      ovs_local_ip            => $ovs_local_ip_real,
       # Rabbit
-      rabbit_host       => $rabbit_host,
-      rabbit_user       => $rabbit_user,
-      rabbit_password   => $rabbit_password,
+      rabbit_host             => $rabbit_host,
+      rabbit_user             => $rabbit_user,
+      rabbit_password         => $rabbit_password,
       # Quantum OVS
-      enable_ovs_agent  => $enable_ovs_agent,
-      firewall_driver   => false,
+      enable_ovs_agent        => $enable_ovs_agent,
+      firewall_driver         => false,
+      ovs_network_vlan_ranges => $ovs_network_vlan_ranges,
+      ovs_bridge_mappings     => $ovs_bridge_mappings,
+      ovs_bridge_uplinks      => $ovs_bridge_uplinks,
+
       # Quantum L3 Agent
-      enable_l3_agent   => $enable_l3_agent,
-      enable_dhcp_agent => $enable_dhcp_agent,
-      auth_url          => $quantum_auth_url,
-      user_password     => $quantum_user_password,
+      enable_l3_agent         => $enable_l3_agent,
+      enable_dhcp_agent       => $enable_dhcp_agent,
+      auth_url                => $quantum_auth_url,
+      user_password           => $quantum_user_password,
       # Keystone
-      keystone_host     => $keystone_host,
+      keystone_host           => $keystone_host,
       # General
-      enabled           => $enabled,
-      enable_server     => false,
-      verbose           => $verbose,
+      enabled                 => $enabled,
+      enable_server           => false,
+      verbose                 => $verbose,
     }
 
     class { 'nova::compute::quantum':

@@ -153,6 +153,7 @@ class openstack::quantum (
   $ovs_enable_tunneling   = true,
   $bridge_uplinks         = [],
   $bridge_mappings        = [],
+  $ovs_network_vlan_ranges = undef,
   # rely on the default set in ovs
   $firewall_driver       = undef,
   # networking and Interface Information
@@ -205,8 +206,9 @@ class openstack::quantum (
       auth_password => $user_password,
     }
     class { 'quantum::plugins::ovs':
-      sql_connection      => $sql_connection,
-      tenant_network_type => 'gre',
+      sql_connection          => $sql_connection,
+      tenant_network_type     => 'gre',
+      ovs_network_vlan_ranges => $ovs_network_vlan_ranges
     }
   }
 
